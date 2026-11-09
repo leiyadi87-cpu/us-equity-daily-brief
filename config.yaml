@@ -12,11 +12,11 @@ news:
   max_age_hours: 36     # ignore news older than this
 
 llm:
-  # github = free GitHub Models via the built-in GITHUB_TOKEN (no key, no cost)
-  # other options: anthropic | openai (paid, need an API key secret) | none (rule-based summary)
-  provider: github
-  model: openai/gpt-4.1
-  fallback_model: openai/gpt-4.1-mini   # tried if the main model is rate-limited or unavailable
+  # gemini = Google Gemini API free tier (key from aistudio.google.com, no credit card)
+  # other options: anthropic | openai (paid) | none (rule-based summary, no key)
+  provider: gemini
+  model: gemini-3.8-flash
+  fallback_models: [gemini-3.6-flash, gemini-3.5-flash-lite]   # tried in order if the main model fails
 
 signals:
   big_move_sigma: 2.0   # daily move larger than N x 20-day volatility

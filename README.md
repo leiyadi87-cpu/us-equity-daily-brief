@@ -1,13 +1,13 @@
 # Daily US Market Brief · 每日美股研究简报
 
-An automated pre-market research brief: **Python** computes the quant layer, an **LLM** writes the narrative, and **GitHub Actions** runs it every trading day and emails the result. Runs entirely on free tiers: GitHub Actions, Yahoo Finance data and **GitHub Models** for the LLM (no API key needed).
+An automated pre-market research brief: **Python** computes the quant layer, an **LLM** writes the narrative, and **GitHub Actions** runs it every trading day and emails the result. Runs entirely on free tiers: GitHub Actions, Yahoo Finance data and the **Gemini API free tier** for the LLM (free key, no credit card).
 
 ```mermaid
 flowchart LR
     A[GitHub Actions cron<br/>Mon–Fri 12:30 UTC] --> B[Python: yfinance<br/>prices for ~50 tickers]
     A --> C[News: Yahoo Finance<br/>+ Finnhub optional]
     B --> D[Quant layer<br/>returns · RSI · 50/200DMA<br/>σ-moves · volume spikes · 52w]
-    C --> E[LLM brief<br/>GitHub Models, free]
+    C --> E[LLM brief<br/>Gemini free tier]
     D --> E
     E --> F[HTML email via Gmail]
     E --> G[reports/ archive<br/>.html · .md · .json]
@@ -36,7 +36,7 @@ main.py                 entry point (fetch → analyze → summarize → render 
 config.yaml             watchlist, language, colors, signal thresholds, LLM choice
 src/data.py             yfinance prices + news, Finnhub market news
 src/analysis.py         indicators, signals, sector aggregates
-src/llm.py              prompt, payload builder, GitHub Models / Anthropic / OpenAI, rule-based fallback
+src/llm.py              prompt, payload builder, Gemini / Anthropic / OpenAI, rule-based fallback
 src/report.py           HTML email (Jinja2 template in templates/)
 src/emailer.py          Gmail SMTP
 src/demo.py             synthetic data for offline runs
@@ -56,16 +56,16 @@ python main.py --no-email      # 真实数据，不发邮件
 pytest -q
 ```
 
-### 2. 准备 Gmail 应用专用密码（AI 部分不用准备任何东西）
-AI 摘要用的是 GitHub Models，Actions 里自带的 `GITHUB_TOKEN` 就能免费调用，不需要申请 key。
-
+### 2. 准备两样免费的东西
 | 用途 | 去哪拿 | 对应 Secret |
 |---|---|---|
+| AI 写简报 | aistudio.google.com → Get API key → Create API key（免费，不绑卡；**不要**给这个项目开 billing） | `GEMINI_API_KEY` |
 | 发邮件 | Google 账号 → 安全性 → 开启两步验证 → 「应用专用密码」生成 16 位密码 | `EMAIL_USER`（你的 Gmail）、`EMAIL_APP_PASSWORD` |
 | 收件人 | 可以是自己，多个用逗号分隔 | `EMAIL_TO` |
 | （可选）大盘新闻 | finnhub.io 免费注册 | `FINNHUB_API_KEY` |
 
 > 注意：`EMAIL_APP_PASSWORD` 是应用专用密码，不是 Gmail 登录密码。没填邮箱 Secret 时程序照样运行，只是不发邮件，简报仍会存进 `reports/`。
+> 免费版 Gemini 的输入可能被 Google 用于改进产品，这里只发送公开行情和新闻标题，没有个人信息。
 > 想换成付费的 Claude / OpenAI：在 config 里改 `provider`，`pip install anthropic` 或 `openai`，再添加对应的 API key Secret。
 
 ### 3. 放到 GitHub

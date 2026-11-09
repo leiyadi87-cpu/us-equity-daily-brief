@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: write           # lets the job commit reports/ back to the repo
-  models: read              # free GitHub Models access for the AI summary
 
 jobs:
   brief:
@@ -28,7 +27,7 @@ jobs:
       - name: Build and send brief
         run: python main.py
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # built in — nothing to set up
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}         # free, from aistudio.google.com
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional, paid
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}         # optional, paid
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}

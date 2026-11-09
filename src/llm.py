@@ -58,7 +58,7 @@ def _f(x, pct=True):
     return f"{x:+.1%}" if pct else f"{x:.2f}"
 
 
-MAX_PAYLOAD_CHARS = 14000   # keeps the prompt well under the free tier's ~8k-token input cap
+MAX_PAYLOAD_CHARS = 30000   # keeps the prompt (and free-tier token use) modest
 
 
 def _rank_news(result: dict, news: list[dict]) -> list[dict]:
@@ -109,8 +109,9 @@ def summarize(result: dict, news: list[dict], cfg: dict) -> tuple[str, str]:
     provider, model = llm.get("provider", "none"), llm.get("model")
     payload = build_payload(result, news)
     try:
-        if provider == "github" and os.getenv("GITHUB_TOKEN"):
-            return _github_models(payload, SYSTEM[lang], model, llm.get("fallback_model"))
+        if provider == "gemini" and os.getenv("GEMINI_API_KEY"):
+            models = [model] + [m for m in llm.get("fallback_models", []) if m != model]
+            return _gemini(payload, SYSTEM[lang], models)
         if provider == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
             import anthropic
             msg = anthropic.Anthropic().messages.create(
@@ -128,34 +129,50 @@ def summarize(result: dict, news: list[dict], cfg: dict) -> tuple[str, str]:
     return rule_based(result, lang), "rule-based"
 
 
-GITHUB_MODELS_URL = "https://models.github.ai/inference/chat/completions"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 
-def _github_models(payload: str, system: str, model: str, fallback: str | None) -> tuple[str, str]:
-    """Free GitHub Models endpoint (OpenAI-compatible). In Actions it authenticates with the
-    built-in GITHUB_TOKEN when the workflow grants `models: read`. Free tier caps input at
-    ~8k tokens per request, so build_payload keeps the prompt small."""
+def _gemini(payload: str, system: str, models: list[str]) -> tuple[str, str]:
+    """Google Gemini API free tier (key from aistudio.google.com, no card needed).
+    Tries each configured model; if none exist any more, picks the newest free 'flash' model."""
     import requests
 
-    last_err = None
-    for m in [model] + ([fallback] if fallback and fallback != model else []):
+    key = os.environ["GEMINI_API_KEY"]
+    body = {"system_instruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": payload}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 8192}}
+
+    def call(m):
+        r = requests.post(f"{GEMINI_URL}/{m}:generateContent", json=body, timeout=180,
+                          headers={"x-goog-api-key": key, "Content-Type": "application/json"})
+        if not r.ok:
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
+        cand = (r.json().get("candidates") or [{}])[0]
+        text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", []) if not p.get("thought"))
+        if not text.strip():
+            raise RuntimeError(f"empty response (finishReason={cand.get('finishReason')})")
+        return text
+
+    errors = []
+    for m in models:
         try:
-            r = requests.post(GITHUB_MODELS_URL, timeout=120, json={
-                "model": m, "temperature": 0.3, "max_tokens": 2000,
-                "messages": [{"role": "system", "content": system},
-                             {"role": "user", "content": payload}]},
-                headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
-                         "Accept": "application/vnd.github+json",
-                         "X-GitHub-Api-Version": "2022-11-28",
-                         "Content-Type": "application/json"})
-            if not r.ok or "json" not in r.headers.get("content-type", ""):
-                raise RuntimeError(f"HTTP {r.status_code} [{r.headers.get('content-type')}] "
-                                   f"url={r.url} body={r.text[:300]!r}")
-            return r.json()["choices"][0]["message"]["content"], f"{m} (GitHub Models)"
+            return call(m), f"{m} (Gemini)"
         except Exception as e:
-            log.warning("GitHub Models %s failed: %s", m, e)
-            last_err = e
-    raise RuntimeError(f"All GitHub Models attempts failed: {last_err}")
+            log.warning("Gemini %s failed: %s", m, e)
+            errors.append(e)
+    # model names change often — discover a current flash model and try once more
+    try:
+        r = requests.get(GEMINI_URL, headers={"x-goog-api-key": key}, timeout=30)
+        names = [x["name"].split("/")[-1] for x in r.json().get("models", [])
+                 if "generateContent" in x.get("supportedGenerationMethods", [])]
+        flash = sorted([n for n in names if "flash" in n and "preview" not in n and "image" not in n
+                        and "tts" not in n and "live" not in n], reverse=True)
+        if flash and flash[0] not in models:
+            log.info("Trying discovered model %s", flash[0])
+            return call(flash[0]), f"{flash[0]} (Gemini)"
+    except Exception as e:
+        errors.append(e)
+    raise RuntimeError(f"All Gemini attempts failed: {errors[-1] if errors else 'unknown'}")
 
 
 def rule_based(result: dict, lang: str = "zh") -> str:
@@ -178,5 +195,5 @@ def rule_based(result: dict, lang: str = "zh") -> str:
     out.append(("- 跌幅前列：" if zh else "- Top losers: ") + ", ".join(f"{r['name']} {_f(r['ret_1d'])}" for r in down))
     out.append("\n## " + ("技术信号" if zh else "Signals"))
     out += [f"- {s['text']}" for s in result["signals"][:8]] or ["- —"]
-    out.append("\n*" + ("未配置 AI API key，以上为规则生成的摘要。" if zh else "No AI key configured — rule-based summary.") + "*")
+    out.append("\n*" + ("AI 摘要不可用（未配置 GEMINI_API_KEY 或调用失败），以上为规则生成的摘要。" if zh else "AI summary unavailable (no GEMINI_API_KEY or the call failed) — rule-based summary.") + "*")
     return "\n".join(out)
