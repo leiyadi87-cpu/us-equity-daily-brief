@@ -145,12 +145,15 @@ def _github_models(payload: str, system: str, model: str, fallback: str | None) 
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": payload}]},
                 headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                         "Accept": "application/vnd.github+json",
+                         "X-GitHub-Api-Version": "2022-11-28",
                          "Content-Type": "application/json"})
-            r.raise_for_status()
+            if not r.ok or "json" not in r.headers.get("content-type", ""):
+                raise RuntimeError(f"HTTP {r.status_code} [{r.headers.get('content-type')}] "
+                                   f"url={r.url} body={r.text[:300]!r}")
             return r.json()["choices"][0]["message"]["content"], f"{m} (GitHub Models)"
         except Exception as e:
-            body = getattr(getattr(e, "response", None), "text", "")[:300]
-            log.warning("GitHub Models %s failed: %s %s", m, e, body)
+            log.warning("GitHub Models %s failed: %s", m, e)
             last_err = e
     raise RuntimeError(f"All GitHub Models attempts failed: {last_err}")
 
