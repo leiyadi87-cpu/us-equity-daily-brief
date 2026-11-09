@@ -58,7 +58,25 @@ def _f(x, pct=True):
     return f"{x:+.1%}" if pct else f"{x:.2f}"
 
 
-def build_payload(result: dict, news: list[dict]) -> str:
+MAX_PAYLOAD_CHARS = 14000   # keeps the prompt well under the free tier's ~8k-token input cap
+
+
+def _rank_news(result: dict, news: list[dict]) -> list[dict]:
+    """Headlines for tickers with signals (and general market news) first."""
+    hot = {s["ticker"] for s in result["signals"][:15]}
+    return sorted(news, key=lambda n: (n["ticker"] not in hot and n["ticker"] != "MARKET"))
+
+
+def build_payload(result: dict, news: list[dict], max_chars: int = MAX_PAYLOAD_CHARS) -> str:
+    news = _rank_news(result, news)
+    while True:
+        p = _build_payload(result, news)
+        if len(p) <= max_chars or not news:
+            return p
+        news = news[: max(0, int(len(news) * 0.8) - 1)]
+
+
+def _build_payload(result: dict, news: list[dict]) -> str:
     lines = [f"Data as of close: {result['as_of']}", ""]
     for g in result["groups"]:
         head = f"### {g['name']}"
@@ -91,6 +109,8 @@ def summarize(result: dict, news: list[dict], cfg: dict) -> tuple[str, str]:
     provider, model = llm.get("provider", "none"), llm.get("model")
     payload = build_payload(result, news)
     try:
+        if provider == "github" and os.getenv("GITHUB_TOKEN"):
+            return _github_models(payload, SYSTEM[lang], model, llm.get("fallback_model"))
         if provider == "anthropic" and os.getenv("ANTHROPIC_API_KEY"):
             import anthropic
             msg = anthropic.Anthropic().messages.create(
@@ -106,6 +126,33 @@ def summarize(result: dict, news: list[dict], cfg: dict) -> tuple[str, str]:
     except Exception as e:
         log.error("LLM call failed, falling back to rule-based summary: %s", e)
     return rule_based(result, lang), "rule-based"
+
+
+GITHUB_MODELS_URL = "https://models.github.ai/inference/chat/completions"
+
+
+def _github_models(payload: str, system: str, model: str, fallback: str | None) -> tuple[str, str]:
+    """Free GitHub Models endpoint (OpenAI-compatible). In Actions it authenticates with the
+    built-in GITHUB_TOKEN when the workflow grants `models: read`. Free tier caps input at
+    ~8k tokens per request, so build_payload keeps the prompt small."""
+    import requests
+
+    last_err = None
+    for m in [model] + ([fallback] if fallback and fallback != model else []):
+        try:
+            r = requests.post(GITHUB_MODELS_URL, timeout=120, json={
+                "model": m, "temperature": 0.3, "max_tokens": 2000,
+                "messages": [{"role": "system", "content": system},
+                             {"role": "user", "content": payload}]},
+                headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                         "Content-Type": "application/json"})
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"], f"{m} (GitHub Models)"
+        except Exception as e:
+            body = getattr(getattr(e, "response", None), "text", "")[:300]
+            log.warning("GitHub Models %s failed: %s %s", m, e, body)
+            last_err = e
+    raise RuntimeError(f"All GitHub Models attempts failed: {last_err}")
 
 
 def rule_based(result: dict, lang: str = "zh") -> str:

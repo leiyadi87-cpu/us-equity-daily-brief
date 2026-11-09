@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import yaml
@@ -72,6 +73,8 @@ def main() -> None:
     # 5) email
     if args.no_email or args.demo:
         log.info("Email skipped")
+    elif not (os.getenv("EMAIL_USER") and os.getenv("EMAIL_APP_PASSWORD")):
+        log.warning("EMAIL_USER / EMAIL_APP_PASSWORD not set — report saved, email skipped")
     else:
         from src import emailer
         emailer.send(subject, html, text)

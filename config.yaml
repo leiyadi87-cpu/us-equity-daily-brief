@@ -12,10 +12,11 @@ news:
   max_age_hours: 36     # ignore news older than this
 
 llm:
-  provider: anthropic   # anthropic | openai | none  (none = rule-based summary, no API key needed)
-  model: claude-sonnet-5-5
-  # provider: openai
-  # model: gpt-5-mini
+  # github = free GitHub Models via the built-in GITHUB_TOKEN (no key, no cost)
+  # other options: anthropic | openai (paid, need an API key secret) | none (rule-based summary)
+  provider: github
+  model: openai/gpt-4.1
+  fallback_model: openai/gpt-4.1-mini   # tried if the main model is rate-limited or unavailable
 
 signals:
   big_move_sigma: 2.0   # daily move larger than N x 20-day volatility

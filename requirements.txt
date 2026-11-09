@@ -5,6 +5,4 @@ pyyaml>=6.0
 jinja2>=3.1
 markdown>=3.5
 requests>=2.31
-anthropic>=0.40
-openai>=1.50
 pytest>=8.0

@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write           # lets the job commit reports/ back to the repo
+  models: read              # free GitHub Models access for the AI summary
 
 jobs:
   brief:
@@ -27,8 +28,9 @@ jobs:
       - name: Build and send brief
         run: python main.py
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # built in — nothing to set up
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional, paid
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}         # optional, paid
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
