@@ -22,7 +22,8 @@ def _ret(c: pd.Series, n: int) -> float:
     return float(c.iloc[-1] / c.iloc[-1 - n] - 1) if len(c) > n else float("nan")
 
 
-def compute_metrics(df: pd.DataFrame) -> dict | None:
+def compute_metrics(df: pd.DataFrame, use_volume: bool = True) -> dict | None:
+    """use_volume=False for futures/indices: Yahoo futures volume jumps around contract rolls."""
     c = df["Close"].dropna()
     if len(c) < 30:
         return None
@@ -65,7 +66,7 @@ def compute_metrics(df: pd.DataFrame) -> dict | None:
         "prev_vs_sma200": float(prev_vs200),
         "z_1d": float(rets.iloc[-1] / vol20) if vol20 > 0 else float("nan"),
         "ann_vol20": float(rets.iloc[-20:].std() * math.sqrt(TRADING_DAYS)),
-        "vol_ratio": float(v.iloc[-1] / avg_vol20) if avg_vol20 > 0 else float("nan"),
+        "vol_ratio": float(v.iloc[-1] / avg_vol20) if (use_volume and avg_vol20 > 0) else float("nan"),
         "hi52": float(window.max()), "lo52": float(window.min()),
         "cross": cross,
     }
@@ -139,7 +140,7 @@ def analyze(prices: dict[str, pd.DataFrame], cfg: dict) -> dict:
     for g in cfg["groups"]:
         rows = []
         for t in g["tickers"]:
-            m = compute_metrics(prices[t]) if t in prices else None
+            m = compute_metrics(prices[t], use_volume=not ("=F" in t or t.startswith("^"))) if t in prices else None
             if m is None:
                 missing.append(t)
                 continue

@@ -153,13 +153,20 @@ def _gemini(payload: str, system: str, models: list[str]) -> tuple[str, str]:
             raise RuntimeError(f"empty response (finishReason={cand.get('finishReason')})")
         return text
 
+    import time
+
     errors = []
     for m in models:
-        try:
-            return call(m), f"{m} (Gemini)"
-        except Exception as e:
-            log.warning("Gemini %s failed: %s", m, e)
-            errors.append(e)
+        for attempt in range(2):          # one retry per model for "busy" errors
+            try:
+                return call(m), f"{m} (Gemini)"
+            except Exception as e:
+                log.warning("Gemini %s failed: %s", m, str(e)[:200])
+                errors.append(e)
+                busy = any(code in str(e) for code in ("HTTP 503", "HTTP 429", "HTTP 500"))
+                if not busy or attempt == 1:
+                    break
+                time.sleep(15)
     # model names change often — discover a current flash model and try once more
     try:
         r = requests.get(GEMINI_URL, headers={"x-goog-api-key": key}, timeout=30)
