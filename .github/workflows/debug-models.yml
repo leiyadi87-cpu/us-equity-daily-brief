@@ -1,0 +1,20 @@
+name: debug-models
+on: workflow_dispatch
+permissions:
+  models: read
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "== catalog"; curl -s https://models.github.ai/catalog/models -H "Authorization: Bearer $GITHUB_TOKEN" | head -c 600; echo
+          echo "== POST models.github.ai"; curl -si -X POST https://models.github.ai/inference/chat/completions -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d '{"model":"openai/gpt-4.1-mini","messages":[{"role":"user","content":"Say hi"}]}' | head -c 1200; echo
+          echo "== POST azure gateway"; curl -si -X POST https://models.inference.ai.azure.com/chat/completions -H "Authorization: Bearer $GITHUB_TOKEN" -H "Content-Type: application/json" -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Say hi"}]}' | head -c 1200; echo
+          echo "== python requests"; python3 -c "
+          import os,requests
+          r=requests.post('https://models.github.ai/inference/chat/completions',json={'model':'openai/gpt-4.1-mini','messages':[{'role':'user','content':'Say hi'}]},headers={'Authorization':'Bearer '+os.environ['GITHUB_TOKEN']},timeout=60)
+          print(r.status_code, r.headers.get('content-type'), r.history, r.text[:300])"
+          echo "== env proxy"; env | grep -i proxy || true
