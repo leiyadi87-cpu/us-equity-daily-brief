@@ -1,0 +1,67 @@
+# ============================================================
+#  Daily US Market Brief — configuration
+#  每日美股研究简报 — 配置文件（改这里就能换股票、换语言）
+# ============================================================
+
+language: zh            # zh = 中文简报, en = English brief
+up_color: green         # green = 美股习惯(涨绿跌红); red = A股习惯(涨红跌绿)
+lookback: 1y            # history used for indicators (needs >= 200 trading days for 200DMA)
+
+news:
+  per_ticker: 2         # max headlines per ticker
+  max_age_hours: 36     # ignore news older than this
+
+llm:
+  provider: anthropic   # anthropic | openai | none  (none = rule-based summary, no API key needed)
+  model: claude-sonnet-5-5
+  # provider: openai
+  # model: gpt-5-mini
+
+signals:
+  big_move_sigma: 2.0   # daily move larger than N x 20-day volatility
+  volume_spike: 2.0     # volume larger than N x 20-day average
+  rsi_high: 70
+  rsi_low: 30
+  near_52w_pct: 0.01    # within 1% of a 52-week high/low
+
+# Friendly names for tickers that are not obvious
+names:
+  "^VIX": VIX 恐慌指数
+  "GC=F": 黄金 Gold
+  "SI=F": 白银 Silver
+  "PL=F": 铂金 Platinum
+  "HG=F": 铜 Copper
+  "CL=F": WTI 原油
+  "NG=F": 天然气 NatGas
+
+# Each group = one section of the brief. `etf` is the sector benchmark (optional).
+groups:
+  - name: 大盘 Market
+    tickers: [SPY, QQQ, "^VIX"]
+
+  - name: AI 七巨头 Magnificent 7
+    tickers: [NVDA, MSFT, AAPL, GOOGL, AMZN, META, TSLA]
+
+  - name: 芯片算力 Semis & Compute
+    etf: SMH
+    tickers: [AMD, AVGO, TSM, ASML, MU, ARM, VRT]
+
+  - name: 航天航空 Aerospace & Defense
+    etf: ITA
+    tickers: [LMT, RTX, NOC, BA, GE, RKLB]
+
+  - name: 民生消费 Consumer Staples
+    etf: XLP
+    tickers: [WMT, COST, PG, KO, PEP, MCD]
+
+  - name: 新能源 Clean Energy
+    etf: ICLN
+    tickers: [NEE, FSLR, ENPH, RIVN, NIO, LI]
+
+  - name: 生物科技 Biotech
+    etf: XBI
+    tickers: [LLY, AMGN, VRTX, REGN, GILD, MRNA]
+
+  - name: 贵金属与大宗商品 Metals & Commodities
+    etf: DBC
+    tickers: ["GC=F", "SI=F", "PL=F", "HG=F", "CL=F", "NG=F"]
