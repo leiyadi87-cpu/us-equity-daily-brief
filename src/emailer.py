@@ -9,7 +9,7 @@ from email.mime.text import MIMEText
 
 def send(subject: str, html: str, text: str) -> None:
     user = os.environ["EMAIL_USER"]
-    password = os.environ["EMAIL_APP_PASSWORD"]
+    password = os.environ["EMAIL_APP_PASSWORD"].replace(" ", "").strip()  # Google shows it as "abcd efgh ijkl mnop"
     to = [x.strip() for x in os.getenv("EMAIL_TO", user).split(",") if x.strip()]
 
     msg = MIMEMultipart("alternative")
