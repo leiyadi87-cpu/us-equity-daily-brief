@@ -19,8 +19,8 @@ def _extract(raw: pd.DataFrame, ticker: str) -> pd.DataFrame | None:
         return None
     if "Close" not in df:
         return None
-    df = df[["Close", "Volume"]].dropna(subset=["Close"])
-    return df if len(df) else None
+    df = df[["Close", "Volume"]].dropna(how="all")
+    return df if df["Close"].notna().any() else None
 
 
 def fetch_prices(tickers: list[str], period: str = "1y", retries: int = 3) -> dict[str, pd.DataFrame]:
@@ -49,44 +49,29 @@ def fetch_prices(tickers: list[str], period: str = "1y", retries: int = 3) -> di
             time.sleep(5 * (attempt + 1))
     if remaining:
         log.error("No data for: %s", remaining)
-    return _refresh_stale(out, start, end)
+    return _patch_missing_last_close(out)
 
 
-def latest_session(ticker: str = "SPY") -> pd.Timestamp | None:
-    """Independent check of the latest daily bar, via Ticker.history instead of download."""
-    import yfinance as yf
-    try:
-        h = yf.Ticker(ticker).history(period="5d", interval="1d", auto_adjust=True)
-        return h.index[-1].tz_localize(None).normalize() if len(h) else None
-    except Exception as e:
-        log.warning("latest_session check failed: %s", e)
-        return None
-
-
-def _refresh_stale(out: dict[str, pd.DataFrame], start: str, end: str) -> dict[str, pd.DataFrame]:
-    """If some series end before the latest session, re-fetch them one by one."""
+def _patch_missing_last_close(out: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    """Yahoo sometimes serves the newest daily bar with Volume but Close=NaN (seen in the
+    evening after the close). Fill it from the quote's regularMarketPrice; drop it if unavailable.
+    Futures are skipped because their 'last price' is a live, still-trading quote."""
     import yfinance as yf
 
-    ref = latest_session()
-    if ref is None:
-        return out
-    stale = [t for t, df in out.items()
-             if df.index[-1].tz_localize(None).normalize() < ref and "=F" not in t and not t.startswith("^")]
-    if not stale:
-        return out
-    log.warning("%d series end before %s — re-fetching individually", len(stale), ref.date())
-    time.sleep(3)
-    fixed = 0
-    for t in stale:
-        try:
-            h = yf.Ticker(t).history(start=start, end=end, interval="1d", auto_adjust=True)
-            if len(h) and h.index[-1].tz_localize(None).normalize() >= ref:
-                h.index = h.index.tz_localize(None)
-                out[t] = h[["Close", "Volume"]].dropna(subset=["Close"])
-                fixed += 1
-        except Exception as e:
-            log.warning("re-fetch %s failed: %s", t, e)
-    log.info("Re-fetched %d/%d stale series", fixed, len(stale))
+    patched = []
+    for t, df in out.items():
+        if pd.isna(df["Close"].iloc[-1]) and "=F" not in t:
+            try:
+                lp = yf.Ticker(t).fast_info.get("lastPrice")
+            except Exception as e:
+                lp = None
+                log.warning("fast_info failed for %s: %s", t, e)
+            if lp and lp > 0:
+                df.iloc[-1, df.columns.get_loc("Close")] = float(lp)
+                patched.append(t)
+        out[t] = df.dropna(subset=["Close"])
+    if patched:
+        log.info("Filled missing latest close from quotes for %d tickers", len(patched))
     return out
 
 
