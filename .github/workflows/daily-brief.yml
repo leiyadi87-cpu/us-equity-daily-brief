@@ -42,3 +42,22 @@ jobs:
           git add reports/
           git diff --cached --quiet || git commit -m "brief: $(date -u +%F)"
           git push
+
+  # Keep the schedule alive. GitHub switches off scheduled workflows in public
+  # repos after 60 days with no repository activity. The daily report commit
+  # above already counts as activity; this job is a second safeguard that also
+  # runs when the brief job fails (so no commit was made that day). It
+  # re-enables this (already enabled) workflow through the GitHub API, which
+  # resets the inactivity clock without making a dummy commit.
+  keepalive:
+    needs: brief
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable this workflow
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/daily-brief.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
