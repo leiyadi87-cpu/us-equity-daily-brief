@@ -69,6 +69,21 @@ jobs:
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
 
+      - name: Show report in log (dry run)
+        if: ${{ inputs.dry_run }}
+        run: |
+          f=$(ls -t reports/*.md | head -1); cat "$f"
+          python - <<'PY'
+          import glob, json, os
+          f = max(glob.glob("reports/*.json"), key=os.path.getmtime)
+          o = json.load(open(f))["overnight"]
+          print("generated", o["generated_et"], "phase", o["phase"], "session", o["session"], "errors", o["errors"])
+          for r in o["global"]:
+              print(r["name"], round(r["last"], 2), r.get("pct"), r.get("chg_bp"), r["status_label"], r["date"])
+          for t, e in sorted(o["extended"].items(), key=lambda kv: -abs(kv[1]["latest_pct"]))[:15]:
+              print(t, e)
+          PY
+
       - name: Upload report (dry run)
         if: ${{ inputs.dry_run }}
         uses: actions/upload-artifact@v4
