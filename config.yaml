@@ -87,5 +87,5 @@ overnight:
     - {ticker: "^TNX",      name: 美国10年期国债收益率,    region: 利率汇率 Rates & FX, tz: America/New_York, close: "15:00", kind: yield}
     - {ticker: "DX-Y.NYB",  name: 美元指数 DXY,           region: 利率汇率 Rates & FX, tz: America/New_York, close: "24h"}
     - {ticker: "JPY=X",     name: 美元/日元 USDJPY,       region: 利率汇率 Rates & FX, tz: America/New_York, close: "24h"}
-    - {ticker: "CNH=X",     name: 美元/离岸人民币 USDCNH,  region: 利率汇率 Rates & FX, tz: America/New_York, close: "24h"}
+    - {ticker: "CNY=X",     name: 美元/人民币 USDCNY,     region: 利率汇率 Rates & FX, tz: America/New_York, close: "24h"}
     - {ticker: "BTC-USD",   name: 比特币 Bitcoin,         region: 加密 Crypto,  tz: UTC,              close: "24h"}
