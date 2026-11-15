@@ -12,6 +12,12 @@ log = logging.getLogger(__name__)
 SYSTEM = {
     "zh": """你是一名买方股票研究分析师，为一位量化金融背景的投资者撰写每日美股盘前简报。
 
+数据说明（务必遵守）：
+- 美股表格是"前一交易日"（数据中注明了日期）的正式收盘数据，可以写"收盘"。
+- 隔夜表格里每个市场都标了状态：今日已收盘 / 交易中 / 实时 / 休市。只有"今日已收盘"或"最近收盘"可以写"收盘"；"交易中""实时"要写"截至 X:XX ET"或"最新"，绝不能说成收盘。
+- 盘后/盘前涨跌幅都是相对前一交易日正式收盘价计算的，写的时候注明是盘后（16:00–20:00 ET）还是盘前。
+- 美国10年期国债收益率的变化用基点（bp）表示。
+
 规则：
 - 只使用下面提供的数据和新闻。不要编造数字、事件或原因。
 - 某个异动如果找不到对应新闻，就写“暂无明确新闻驱动”。
@@ -20,19 +26,28 @@ SYSTEM = {
 
 用 Markdown 输出，结构如下：
 ## 一句话总结
-## 大盘与情绪
+（同时覆盖前一交易日美股表现和隔夜方向）
+## 隔夜全景
+（亚洲收盘、欧洲、美股期货、美元/美债/人民币/比特币，2–4 句，每个数字注明是收盘还是截至几点）
+## 前一交易日回顾
 （SPY / QQQ / VIX，2–3 句）
 ## 板块轮动
 （哪些板块领涨、领跌，和 1 个月趋势对比；包括贵金属与大宗商品）
 ## 个股异动与驱动
-（3–6 条，每条格式：**代码** 涨跌幅 — 原因，并说明对应哪条新闻）
+（3–6 条，每条格式：**代码** 涨跌幅 — 原因，并说明对应哪条新闻；盘后/盘前有大幅异动的个股也放进来，注明时段）
 ## 技术信号
 （挑最重要的 2–4 个：超买超卖、均线突破、放量等）
 ## 今日关注
 （2–4 条，只基于新闻中出现的事件：财报、宏观数据、政策、风险）
 
-全文控制在 600 字以内。""",
+全文控制在 800 字以内。""",
     "en": """You are a buy-side equity research analyst writing a pre-market US equities brief for a quantitatively trained investor.
+
+Data notes (follow strictly):
+- The US tables are official regular-session CLOSES of the previous trading day (date given).
+- Each overnight market carries a status: closed today / trading / live / holiday. Only call a level a "close" if its status is closed; otherwise say "as of HH:MM ET" or "latest".
+- After-hours / pre-market moves are measured against the previous official close; say which session.
+- The US 10-year yield change is in basis points.
 
 Rules:
 - Use only the data and headlines provided. Never invent numbers, events or causes.
@@ -41,14 +56,15 @@ Rules:
 - No buy/sell recommendations.
 
 Output Markdown with these sections:
-## One-line summary
-## Market & sentiment  (SPY / QQQ / VIX, 2-3 sentences)
+## One-line summary  (previous session + overnight direction)
+## Overnight  (Asia close, Europe, US futures, dollar/Treasuries/CNH/Bitcoin; 2-4 sentences)
+## Previous session  (SPY / QQQ / VIX, 2-3 sentences)
 ## Sector rotation  (leaders/laggards vs 1-month trend, incl. metals & commodities)
-## Notable movers & catalysts  (3-6 bullets: **TICKER** move — reason, citing the headline)
+## Notable movers & catalysts  (3-6 bullets incl. big after-hours/pre-market moves, citing the headline)
 ## Technical signals  (the 2-4 most important)
 ## Watch today  (2-4 items, only from events mentioned in the headlines)
 
-Keep it under 350 words.""",
+Keep it under 450 words.""",
 }
 
 
@@ -76,8 +92,51 @@ def build_payload(result: dict, news: list[dict], max_chars: int = MAX_PAYLOAD_C
         news = news[: max(0, int(len(news) * 0.8) - 1)]
 
 
+PHASES = {"pre": "pre-market", "regular": "REGULAR SESSION IS OPEN (latest US prices are intraday)",
+          "post": "after-hours", "closed": "closed"}
+
+
+def _overnight_lines(result: dict) -> list[str]:
+    o = result.get("overnight") or {}
+    if not o:
+        return []
+    lines = ["### Overnight & global markets (status per market; change vs that market's previous close)",
+             "market | last | change | status"]
+    for r in o.get("global", []):
+        chg = f"{r['chg_bp']:+.1f} bp" if "chg_bp" in r and not math.isnan(r.get("chg_bp", math.nan)) else _f(r.get("pct"))
+        lines.append(f"{r['name']} ({r['ticker']}) | {r['last']:.2f} | {chg} | {r['status_label']}")
+    if not o.get("global"):
+        lines.append("- (overnight data unavailable)")
+    lines.append("")
+    by = {x["ticker"]: x for g in result["groups"] for x in g["rows"]}
+    for g in result["groups"]:
+        if g.get("etf"):
+            by[g["etf"]["ticker"]] = {**g["etf"], "name": g["etf"]["ticker"]}
+    ext = o.get("extended", {})
+    thr = result.get("ext_move_min", 0.015)
+    pick = [t for t in ("SPY", "QQQ") if t in ext]
+    pick += sorted([t for t, e in ext.items() if t not in pick and
+                    (abs(e["latest_pct"]) >= thr or (not math.isnan(e["ah_pct"]) and abs(e["ah_pct"]) >= thr))],
+                   key=lambda t: -abs(ext[t]["latest_pct"]))[:12]
+    lines += [f"### US extended hours vs official close of {result.get('session', result['as_of'])}",
+              "ticker | official close | after-hours (16:00-20:00 ET) | latest (time ET, session)"]
+    names = {"post": "after-hours", "pre": "pre-market", "regular": "regular session"}
+    for t in pick:
+        e = ext[t]
+        close = by.get(t, {}).get("close")
+        lines.append(f"{t} | {close:.2f} | {_f(e['ah_pct'])} | {_f(e['latest_pct'])} "
+                     f"({e['latest_time']}, {names.get(e['latest_phase'], e['latest_phase'])})"
+                     if close else f"{t} | n/a | {_f(e['ah_pct'])} | {_f(e['latest_pct'])}")
+    if not pick:
+        lines.append("- (no extended-hours moves above threshold)")
+    return lines + [""]
+
+
 def _build_payload(result: dict, news: list[dict]) -> str:
-    lines = [f"Data as of close: {result['as_of']}", ""]
+    o = result.get("overnight") or {}
+    lines = [f"US tables: official regular-session CLOSE of {result['as_of']} (last completed US trading day).",
+             f"Brief generated: {o.get('generated_et', 'n/a')} ET · US market now: {PHASES.get(o.get('phase'), 'n/a')}", ""]
+    lines += _overnight_lines(result)
     for g in result["groups"]:
         head = f"### {g['name']}"
         if g["etf"]:
@@ -200,6 +259,12 @@ def rule_based(result: dict, lang: str = "zh") -> str:
         out.append(("- 领跌板块：" if zh else "- Lagging: ") + f"{sectors[-1][0]} {_f(sectors[-1][1])}")
     out.append(("- 涨幅前列：" if zh else "- Top gainers: ") + ", ".join(f"{r['name']} {_f(r['ret_1d'])}" for r in up))
     out.append(("- 跌幅前列：" if zh else "- Top losers: ") + ", ".join(f"{r['name']} {_f(r['ret_1d'])}" for r in down))
+    o = result.get("overnight") or {}
+    if o.get("global"):
+        out.append("\n## " + ("隔夜全景" if zh else "Overnight"))
+        for r in o["global"]:
+            chg = f"{r['chg_bp']:+.1f} bp" if "chg_bp" in r else _f(r.get("pct"))
+            out.append(f"- {r['name']} {r['last']:.2f}（{chg}，{r['status_label']}）")
     out.append("\n## " + ("技术信号" if zh else "Signals"))
     out += [f"- {s['text']}" for s in result["signals"][:8]] or ["- —"]
     out.append("\n*" + ("AI 摘要不可用（未配置 GEMINI_API_KEY 或调用失败），以上为规则生成的摘要。" if zh else "AI summary unavailable (no GEMINI_API_KEY or the call failed) — rule-based summary.") + "*")

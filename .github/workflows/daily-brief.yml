@@ -1,21 +1,48 @@
 name: Daily US Market Brief
 
+# Pre-market brief: previous session's official close + after-hours, Asia close,
+# Europe so far, US futures, rates/FX — sent once per US trading morning.
+#
+# Triggers
+# - workflow_dispatch: the primary trigger. A Claude scheduled task starts it every
+#   weekday at ~05:43 ET (GitHub's own cron has been starting 7+ hours late).
+#   Pass force=true to send again even if today's brief already went out.
+# - schedule: backup only, in case the primary trigger doesn't fire. Several slots;
+#   whichever runs first sends the brief and the rest exit (--once-per-day).
+#   Times are UTC: 10:41 UTC = 05:41 ET (winter) / 06:41 ET (summer).
 on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Send even if today's brief was already sent"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Build the report only (no email, no commit); download it from the run's artifacts"
+        type: boolean
+        default: false
   schedule:
-    # 12:30 UTC Mon–Fri = 7:30am ET (winter) / 8:30am ET (summer) = 4:30am / 5:30am PT
-    # GitHub cron is UTC and can start a few minutes late.
-    - cron: "30 12 * * 1-5"
-  workflow_dispatch:        # "Run workflow" button for manual runs
+    - cron: "41 10 * * 1-5"
+    - cron: "17 11 * * 1-5"
+    - cron: "53 11 * * 1-5"
 
 permissions:
   contents: write           # lets the job commit reports/ back to the repo
 
+concurrency:                # never run two briefs at the same time
+  group: daily-brief
+  cancel-in-progress: false
+
 jobs:
   brief:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      # a queued run may have been triggered before an earlier run pushed today's marker
+      - name: Get latest reports
+        run: git pull --ff-only origin "${GITHUB_REF_NAME}"
 
       - uses: actions/setup-python@v5
         with:
@@ -25,7 +52,14 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Build and send brief
-        run: python main.py
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python main.py --no-email
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
+            python main.py
+          else
+            python main.py --once-per-day
+          fi
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}         # free, from aistudio.google.com
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}   # optional, paid
@@ -35,12 +69,22 @@ jobs:
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
 
+      - name: Upload report (dry run)
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-report
+          path: reports/
+
       - name: Archive report in repo
+        if: ${{ !inputs.dry_run }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add reports/
-          git diff --cached --quiet || git commit -m "brief: $(date -u +%F)"
+          git diff --cached --quiet && exit 0
+          git commit -m "brief: $(TZ=America/New_York date +%F)"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
           git push
 
   # Keep the schedule alive. GitHub switches off scheduled workflows in public

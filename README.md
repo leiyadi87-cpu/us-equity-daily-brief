@@ -15,6 +15,21 @@ flowchart LR
 
 **Coverage (edit `config.yaml`):** SPY / QQQ / VIX · Magnificent 7 · Semis & Compute (SMH) · Aerospace & Defense (ITA) · Consumer Staples (XLP) · Clean Energy (ICLN) · Biotech (XBI) · Precious Metals & Commodities (gold, silver, platinum, copper, WTI, natural gas; DBC).
 
+## Data timing (pre-market brief)
+
+The brief goes out once per US trading morning (~05:45 ET) and always uses:
+
+| Block | What it is | Label in the email |
+|---|---|---|
+| US tables, signals, sectors | **official regular-session close of the last completed trading day** — a half-finished day is never used, whatever time the job actually runs | 正式收盘 |
+| After-hours / pre-market | 5-minute bars incl. extended hours, measured against that official close (after-hours = 16:00–20:00 ET; latest = most recent trade) | 盘后 / 盘前 + time |
+| Asia | Nikkei, KOSPI, TAIEX, Shanghai, Shenzhen, Hang Seng — normally closed for the day by then | 今日已收盘 |
+| Europe | STOXX 50, DAX, FTSE — usually mid-session | 交易中（截至 HH:MM ET） |
+| US futures, FX, crypto | ES, NQ, YM, DXY, USDJPY, USDCNH, Bitcoin | 实时（截至 HH:MM ET） |
+| Rates | US 10-year yield, change in bp | 最近收盘 |
+
+If a run ever starts during US trading hours, the email says so at the top and the US tables still show the previous official close.
+
 ## What the quant layer computes
 
 | Metric | Definition |

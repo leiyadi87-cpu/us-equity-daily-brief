@@ -60,5 +60,5 @@ def test_end_to_end_demo_render():
     assert any(s["ticker"] == "NVDA" and s["type"] == "big_move" for s in result["signals"])
     md = llm.rule_based(result, "zh")
     subject, html, _ = report.render(result, demo.demo_news(), md, "rule-based", CFG, demo=True)
-    assert "NVDA" in html and "DEMO DATA" in html and subject.startswith("每日美股研究简报")
-    assert "Data as of close" in llm.build_payload(result, demo.demo_news())
+    assert "NVDA" in html and "DEMO DATA" in html and subject.startswith("每日美股盘前简报")
+    assert "official regular-session CLOSE" in llm.build_payload(result, demo.demo_news())

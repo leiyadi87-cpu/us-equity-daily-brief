@@ -66,3 +66,26 @@ groups:
   - name: 贵金属与大宗商品 Metals & Commodities
     etf: DBC
     tickers: ["GC=F", "SI=F", "PL=F", "HG=F", "CL=F", "NG=F"]
+
+# Overnight panel (pre-market brief): Asia, Europe, US futures, rates, FX, crypto.
+# close = local closing time of the exchange ("24h" = trades around the clock).
+overnight:
+  ext_move_min: 0.015      # show after-hours / pre-market moves of at least 1.5%
+  markets:
+    - {ticker: "^N225",     name: 日经225 Nikkei,        region: 亚洲 Asia,    tz: Asia/Tokyo,       close: "15:30"}
+    - {ticker: "^KS11",     name: 韩国综指 KOSPI,        region: 亚洲 Asia,    tz: Asia/Seoul,       close: "15:30"}
+    - {ticker: "^TWII",     name: 台湾加权 TAIEX,        region: 亚洲 Asia,    tz: Asia/Taipei,      close: "13:30"}
+    - {ticker: "000001.SS", name: 上证指数 Shanghai,      region: 亚洲 Asia,    tz: Asia/Shanghai,    close: "15:00"}
+    - {ticker: "399001.SZ", name: 深证成指 Shenzhen,      region: 亚洲 Asia,    tz: Asia/Shanghai,    close: "15:00"}
+    - {ticker: "^HSI",      name: 恒生指数 Hang Seng,     region: 亚洲 Asia,    tz: Asia/Hong_Kong,   close: "16:10"}
+    - {ticker: "^STOXX50E", name: 欧洲斯托克50 STOXX 50, region: 欧洲 Europe,  tz: Europe/Berlin,    close: "17:30"}
+    - {ticker: "^GDAXI",    name: 德国 DAX,              region: 欧洲 Europe,  tz: Europe/Berlin,    close: "17:30"}
+    - {ticker: "^FTSE",     name: 英国富时100 FTSE,       region: 欧洲 Europe,  tz: Europe/London,    close: "16:30"}
+    - {ticker: "ES=F",      name: 标普500期货 ES,         region: 美股期货 US futures, tz: America/New_York, close: "24h"}
+    - {ticker: "NQ=F",      name: 纳指100期货 NQ,         region: 美股期货 US futures, tz: America/New_York, close: "24h"}
+    - {ticker: "YM=F",      name: 道指期货 YM,            region: 美股期货 US futures, tz: America/New_York, close: "24h"}
+    - {ticker: "^TNX",      name: 美国10年期国债收益率,    region: 利率汇率 Rates & FX, tz: America/New_York, close: "15:00", kind: yield}
+    - {ticker: "DX-Y.NYB",  name: 美元指数 DXY,           region: 利率汇率 Rates & FX, tz: America/New_York, close: "24h"}
+    - {ticker: "JPY=X",     name: 美元/日元 USDJPY,       region: 利率汇率 Rates & FX, tz: America/New_York, close: "24h"}
+    - {ticker: "CNH=X",     name: 美元/离岸人民币 USDCNH,  region: 利率汇率 Rates & FX, tz: America/New_York, close: "24h"}
+    - {ticker: "BTC-USD",   name: 比特币 Bitcoin,         region: 加密 Crypto,  tz: UTC,              close: "24h"}
